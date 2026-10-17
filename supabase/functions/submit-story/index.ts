@@ -1,5 +1,6 @@
 // Deploy as Supabase Edge Function: submit-story
 // Required secrets: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Optional Discord notification secrets: DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -11,6 +12,40 @@ const corsHeaders = {
 const categories = new Set(["World", "Politics", "Business", "Sports", "Technology", "Gaming", "Local", "Opinion"]);
 const reply = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
+
+async function notifyDiscord(story: {id:string;author:string;category:string;headline:string;body:string;image_url:string|null}) {
+  const token = Deno.env.get("DISCORD_BOT_TOKEN");
+  const channelId = Deno.env.get("DISCORD_CHANNEL_ID");
+  if (!token || !channelId) return;
+  const snippet = story.body.length > 3200 ? story.body.slice(0, 3190) + "…" : story.body;
+  const components = [{
+    type: 1,
+    components: [
+      { type: 2, style: 3, label: "YES — Publish", custom_id: "tns:yes:" + story.id },
+      { type: 2, style: 4, label: "NO — Reject", custom_id: "tns:no:" + story.id },
+    ],
+  }];
+  const payload: Record<string, unknown> = {
+    content: "📰 **TNS NEWS — STORY NEEDS YOUR REVIEW**\nRead the submission below, then choose YES to publish or NO to reject. Only authorized reviewers can decide.",
+    embeds: [{
+      title: story.headline.slice(0, 256),
+      description: "**Category:** " + story.category + "\n**Submitted by:** " + story.author + "\n\n" + snippet,
+      color: 15158332,
+      ...(story.image_url ? { image: { url: story.image_url } } : {}),
+      footer: { text: "TNS News • AI screening is not fact-checking • Story ID: " + story.id },
+    }],
+    components,
+    allowed_mentions: { parse: [] },
+  };
+  const response = await fetch("https://discord.com/api/v10/channels/" + encodeURIComponent(channelId) + "/messages", {
+    method: "POST",
+    headers: { "Authorization": "Bot " + token, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    console.error("Discord notification failed with status", response.status, await response.text());
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -39,24 +74,16 @@ Deno.serve(async (req) => {
   if (headline.length < 5 || headline.length > 120) return reply(400, { error: "Headline must be 5–120 characters." });
   if (body.length < 40 || body.length > 10000) return reply(400, { error: "Story text must be 40–10,000 characters." });
   if (imageUrl) {
-    try {
-      const url = new URL(imageUrl);
-      if (url.protocol !== "https:") throw new Error("https required");
-    } catch {
-      return reply(400, { error: "Image links must be valid HTTPS URLs." });
-    }
+    try { const url = new URL(imageUrl); if (url.protocol !== "https:") throw new Error("https required"); }
+    catch { return reply(400, { error: "Image links must be valid HTTPS URLs." }); }
   }
 
-  // Moderate headline and article text. Images are not scanned and require editor review.
   let moderation: { flagged: boolean; categories: Record<string, boolean> };
   try {
     const modResponse = await fetch("https://api.openai.com/v1/moderations", {
       method: "POST",
       headers: { "Authorization": "Bearer " + openaiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "omni-moderation-latest",
-        input: "Headline: " + headline + "\n\nCategory: " + category + "\n\nArticle: " + body,
-      }),
+      body: JSON.stringify({ model: "omni-moderation-latest", input: "Headline: " + headline + "\n\nCategory: " + category + "\n\nArticle: " + body }),
     });
     if (!modResponse.ok) {
       console.error("Moderation API returned status", modResponse.status);
@@ -64,37 +91,32 @@ Deno.serve(async (req) => {
     }
     const result = await modResponse.json();
     const first = result?.results?.[0];
-    if (!first || typeof first.flagged !== "boolean") {
-      return reply(502, { error: "AI moderation returned an unexpected result. Please try again later." });
-    }
+    if (!first || typeof first.flagged !== "boolean") return reply(502, { error: "AI moderation returned an unexpected result. Please try again later." });
     moderation = { flagged: first.flagged, categories: first.categories ?? {} };
   } catch (error) {
     console.error("Moderation request failed", error);
     return reply(502, { error: "AI moderation is temporarily unavailable. Nothing was submitted; please try again later." });
   }
 
-  if (moderation.flagged) {
-    return reply(422, {
-      error: "This story did not pass the initial AI safety check. Please revise it to remove potentially harmful content and try again.",
-      moderation: "flagged",
-    });
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
+  if (moderation.flagged) return reply(422, {
+    error: "This story did not pass the initial AI safety check. Please revise it to remove potentially harmful content and try again.",
+    moderation: "flagged",
   });
-  const { error } = await supabase.from("stories").insert({
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: story, error } = await supabase.from("stories").insert({
     author, category, headline, body, image_url: imageUrl,
     status: "pending", moderation_flagged: false, moderation_categories: moderation.categories,
-  });
-  if (error) {
+  }).select("id,author,category,headline,body,image_url").single();
+  if (error || !story) {
     console.error("Could not save moderated story", error);
     return reply(500, { error: "Your story passed the initial check, but could not be saved. Please try again later." });
   }
 
+  try { await notifyDiscord(story); } catch (error) { console.error("Discord notification failed", error); }
   return reply(201, {
     ok: true,
-    message: "Your story passed the initial AI safety check and is now waiting for editorial approval.",
+    message: "Your story passed the initial AI safety check and is waiting for approval. If Discord is configured, the editors have been notified.",
     status: "pending",
   });
 });
