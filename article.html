@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Read the full story on TNS News.">
+<title>TNS News — Article</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;700&display=swap');
+:root{--red:#c91524;--ink:#111;--muted:#686868;--line:#d4d4d4;--paper:#fff;--soft:#f3f3f3}*{box-sizing:border-box}body{margin:0;background:#f4f4f4;color:var(--ink);font-family:'Roboto Condensed',Arial,sans-serif}.browser{height:25px;background:#171717;color:#ddd;padding:4px 12px;display:flex;align-items:center;gap:10px;font:11px Arial}.address{background:#303030;border-radius:12px;padding:3px 13px;flex:1;overflow:hidden;white-space:nowrap}.mast{max-width:1050px;margin:auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:2px solid #111;background:white}.brand{font:700 34px Oswald,sans-serif;letter-spacing:-1.8px;text-decoration:none;color:#111}.brand span{color:var(--red)}.back{font:600 14px Oswald,sans-serif;text-decoration:none;color:#111}.back:hover{color:var(--red)}.ticker{background:#111;color:#fff;padding:8px max(calc((100% - 1010px)/2),20px);font:12px Oswald,sans-serif}.ticker b{background:var(--red);padding:4px 8px;margin-right:9px}.wrap{max-width:900px;margin:24px auto;padding:0 18px}.article{background:white;padding:clamp(20px,5vw,55px);border-top:5px solid var(--red);box-shadow:0 2px 10px #0000000a}.kicker{color:var(--red);font:700 12px Oswald,sans-serif;letter-spacing:1.4px;text-transform:uppercase}.article h1{font:600 clamp(31px,5vw,52px)/1.08 Oswald,sans-serif;text-transform:uppercase;margin:14px 0}.summary{font-size:19px;font-weight:bold;line-height:1.5;color:#333;margin:15px 0}.meta{font-size:12px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding:12px 0 18px}.hero{width:100%;max-height:480px;object-fit:cover;display:block;margin:22px 0 8px;background:#eee}.caption{font-size:11px;color:var(--muted);margin-bottom:24px}.body{font:19px/1.85 Georgia,'Times New Roman',serif;white-space:pre-wrap;overflow-wrap:anywhere}.body p{margin:0 0 1.3em}.notice{margin-top:28px;padding:13px;background:#f3f3f3;border-left:4px solid var(--red);font-size:12px;color:#555}.error{padding:22px;background:white;border-left:4px solid var(--red)}footer{max-width:900px;margin:0 auto 28px;padding:18px;color:#555;font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}footer a{color:var(--red)}.loading{color:#555}@media(max-width:500px){.mast{padding:10px 13px}.brand{font-size:28px}.wrap{padding:0 10px;margin:14px auto}.article{padding:20px 16px}.body{font-size:17px}.ticker{padding-left:13px}}
+</style>
+</head>
+<body>
+<div class="browser"><span>● ● ●</span><span>‹</span><span>›</span><span class="address" id="address">www.tnsnews.com/article</span><span>◉</span></div>
+<header class="mast"><a class="brand" href="index.html">TNS<span> NEWS</span></a><a class="back" href="index.html">← BACK TO THE NEWSROOM</a></header>
+<div class="ticker"><b>TNS NEWS</b> THE NEWS NEVER STOPS · FULL STORY</div>
+<main class="wrap"><article class="article" id="article"><p class="loading">Loading the full story…</p></article></main>
+<footer><span>© 2026 TNS NEWS · THE NEWS NEVER STOPS.</span><span>Fictional news and satire project · <a href="index.html">Home</a></span></footer>
+<script src="stories.js"></script>
+<script>
+const SUPABASE_URL = "https://dueysmzmtpmfqsxjmzhk.supabase.co/";
+const SUPABASE_ANON_KEY = "sb_publishable_QmZZ7G5Pm5OCSnz9i0lygw_IeOG9ojA";
+const params = new URLSearchParams(location.search);
+const id = params.get('id');
+const demo = params.get('demo');
+const root = document.getElementById('article');
+const text = (tag,value,cls) => { const n=document.createElement(tag); if(cls)n.className=cls; n.textContent=value||''; return n; };
+function render(story,isDemo=false){
+ document.title=(story.headline||'Article')+' — TNS News';
+ document.getElementById('address').textContent='www.tnsnews.com/article/'+(story.slug||story.id||'story');
+ root.replaceChildren();
+ root.append(text('div',(story.category||'News')+' · TNS NEWS'+(isDemo?' · FICTIONAL STORY':''),'kicker'));
+ root.append(text('h1',story.headline||'TNS News Story'));
+ if(story.summary)root.append(text('p',story.summary,'summary'));
+ root.append(text('div',(story.author||'TNS News Staff')+' · '+(story.created_at?new Date(story.created_at).toLocaleString():'TNS NEWS DESK'),'meta'));
+ if(story.image_url){const img=document.createElement('img');img.className='hero';img.src=story.image_url;img.alt='Story illustration';img.onerror=()=>img.remove();root.append(img);root.append(text('div',isDemo?'Illustrative image for a fictional TNS News story.':'Story image supplied with the submission.','caption'));}
+ const body=text('div',story.body||'No full article text is available.','body');root.append(body);
+ root.append(text('div',isDemo?'This article is fictional satire created for the TNS News website. Names, events and claims in this demo story are invented.':'Community submission published by TNS News after editorial review.','notice'));
+}
+async function init(){
+ if(demo){
+  const story=(window.TNS_DEMO_STORIES||[]).find(s=>s.slug===demo);
+  if(story){render(story,true);return;}
+  root.replaceChildren(text('h1','Story not found'),text('p','This generated demo story is not available. Return to the newsroom and open another article.','error'));return;
+ }
+ if(!id){root.replaceChildren(text('h1','No story selected'),text('p','Open an article from the TNS News homepage to read the full story.','error'));return;}
+ try{
+  const response=await fetch(SUPABASE_URL+'/rest/v1/stories?select=id,headline,body,author,category,image_url,created_at,status&id=eq.'+encodeURIComponent(id)+'&status=eq.published&limit=1',{headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY}});
+  if(!response.ok)throw new Error('Could not retrieve the story.');
+  const rows=await response.json();
+  if(!rows.length){root.replaceChildren(text('h1','Story unavailable'),text('p','This story may have been removed or has not been published. Only approved stories can be read here.','error'));return;}
+  render(rows[0]);
+ }catch(error){root.replaceChildren(text('h1','Story could not load'),text('p','Please return to the TNS News homepage and try again.','error'));}
+}
+init();
+</script>
+</body></html>
