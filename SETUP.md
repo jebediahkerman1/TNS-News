@@ -1,31 +1,19 @@
 # TNS News setup guide
 
-The public GitHub Pages website accepts reader submissions. Supabase stores them, and the existing `submit-story` Edge Function checks headline/article text with OpenAI's moderation API. Passing AI checks does **not** publish a story: a human editor must read it and approve it in the private Editorial Desk.
+TNS News uses GitHub Pages for the public website and Supabase Edge Functions/Database for submissions and review. New stories are screened by AI, stored as pending, and must be approved by an authorized editor before they become public. Editors can review in the website Editorial Desk or click YES/NO buttons in a private Discord moderation channel.
 
-## 1. Publish the site
+## 1. Website
 
-In the GitHub repository, open **Settings → Pages** and choose **Deploy from a branch**, branch `main`, folder `/(root)`. The public site should be:
+GitHub Pages site: `https://jebediahkerman1.github.io/TNS-News/`
 
-`https://jebediahkerman1.github.io/TNS-News/`
+Private website Editorial Desk: `https://jebediahkerman1.github.io/TNS-News/admin.html`
 
-The private review dashboard is:
+## 2. Database and website editor
 
-`https://jebediahkerman1.github.io/TNS-News/admin.html`
-
-## 2. Set up the Supabase database
-
-1. Open your Supabase project: `https://supabase.com/dashboard`.
-2. Go to **SQL Editor → New query**.
-3. Copy the complete contents of `supabase/schema.sql` into the editor and run it.
-4. The schema makes published stories readable by the public, while only explicitly authorized editor accounts can read pending stories or change story status.
-
-If you have already created a stories table, inspect it before running migrations. The SQL uses `create table if not exists`, so it does not automatically add missing columns to an older table.
-
-## 3. Create your private editor account
-
-1. In Supabase, open **Authentication → Users → Add user** and create an account with your email and a strong password. Enable email confirmation if you prefer; follow the project's auth settings.
-2. Copy the new user's UUID from the Users table.
-3. Return to **SQL Editor** and run this statement, replacing the example UUID with your own user's UUID:
+1. Open your Supabase project at `https://supabase.com/dashboard`.
+2. Go to **SQL Editor → New query** and run the contents of `supabase/schema.sql`.
+3. In **Authentication → Users**, create your editor account and copy its UUID.
+4. In SQL Editor, grant the account editorial access:
 
 ```sql
 insert into public.tns_admins (user_id)
@@ -33,39 +21,73 @@ values ('PASTE-YOUR-USER-UUID-HERE')
 on conflict (user_id) do nothing;
 ```
 
-Only grant this access to accounts you personally trust. Do not put an admin password or service-role key in the website.
+5. Visit `admin.html` and sign in. Never put an admin password or service-role key in website JavaScript.
 
-Then visit `https://jebediahkerman1.github.io/TNS-News/admin.html` and sign in. You can read full pending stories, inspect the optional image, then select **Approve & Publish** or **Reject Story**. The dashboard checks for new pending stories every 15 seconds while open.
+If the database already had a `stories` table before this schema was run, check for missing columns before deploying; `create table if not exists` does not migrate an older table automatically.
 
-## 4. Enable AI moderation for submissions
+## 3. Create a Discord moderation bot
 
-The browser must never contain your OpenAI API key or Supabase service-role key. The existing Edge Function keeps those secrets on the server.
+You only need Discord itself and your existing Supabase project; no separate notification service is needed.
 
-From a terminal with Node.js and the Supabase CLI installed, in a local clone of this repository run:
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create an application named **TNS News Moderator**.
+2. In **Bot**, create/reset the bot token and copy it somewhere private. Never publish it or commit it to GitHub.
+3. In **General Information**, copy the **Application ID** and **Public Key**.
+4. In the Discord server, create a private channel such as `#tns-story-review`. Give only trusted moderators access. Copy its channel ID (enable Developer Mode in Discord settings, then right-click the channel → Copy Channel ID).
+5. Under the application’s **OAuth2 → URL Generator**, select the `bot` scope and the `Send Messages` and `Embed Links` permissions, then use the generated URL to add the bot to your server. Keep the review channel private.
+6. Copy each moderator's Discord **User ID** (Developer Mode → right-click their profile → Copy User ID). Only IDs listed in the server secret `DISCORD_MODERATOR_IDS` may approve/reject stories.
+
+## 4. Configure Supabase secrets
+
+In Supabase **Edge Functions → Secrets** (or with the CLI), set these server-side secrets:
+
+- `OPENAI_API_KEY` — your OpenAI API key for the existing AI moderation check.
+- `DISCORD_BOT_TOKEN` — the bot token.
+- `DISCORD_CHANNEL_ID` — ID of the private review channel.
+- `DISCORD_APPLICATION_PUBLIC_KEY` — Public Key from the Discord Developer Portal.
+- `DISCORD_MODERATOR_IDS` — comma-separated Discord user IDs allowed to decide, for example `111111111111111111,222222222222222222`.
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — Supabase normally supplies these to Edge Functions. If they are missing, configure them as server-side secrets.
+
+Do not add bot tokens, the service-role key, or the OpenAI key to `index.html`, `admin.html`, or any public GitHub file.
+
+## 5. Deploy the Edge Functions
+
+Install Node.js and the Supabase CLI, clone this repository, then run these commands from the local repository folder. Replace the project reference with your Supabase project's reference.
 
 ```sh
 supabase login
-supabase link --project-ref YOUR-PROJECT-REF
+supabase link --project-ref YOUR_PROJECT_REF
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+supabase secrets set DISCORD_BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
+supabase secrets set DISCORD_CHANNEL_ID=YOUR_DISCORD_CHANNEL_ID
+supabase secrets set DISCORD_APPLICATION_PUBLIC_KEY=YOUR_DISCORD_PUBLIC_KEY
+supabase secrets set DISCORD_MODERATOR_IDS=YOUR_DISCORD_USER_ID
 supabase functions deploy submit-story --no-verify-jwt
+supabase functions deploy discord-review --no-verify-jwt
 ```
 
-Get your OpenAI API key from `https://platform.openai.com/api-keys` and keep it private. Supabase normally provides `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. If the function reports missing secrets, configure them as server-side function secrets in the Supabase dashboard. Never paste the service-role key into `index.html` or `admin.html`.
+If you have multiple moderators, put their IDs in one comma-separated value surrounded by quotes if your shell requires it. Supabase Edge Functions use the secrets configured in your project.
 
-The frontend uses a public Supabase publishable key, which is designed for browser use. Keep database access safe with the row-level security policies in `supabase/schema.sql`.
+## 6. Connect Discord button interactions
 
-## 5. How review and notifications work
+After deploying `discord-review`, copy your Supabase project URL and set the Discord application's **Interactions Endpoint URL** under **General Information** to:
 
-1. A reader submits a headline and article text.
-2. The server-side AI moderation check rejects text it flags; if the moderation service is unavailable, the submission is not saved.
-3. If it passes, the story is saved as `pending`, invisible to public readers.
-4. The editor signs in at `admin.html`, reads the full story and checks the image and factual claims.
-5. **Approve & Publish** changes the story to `published`; **Reject Story** keeps it hidden.
-6. With the Editorial Desk open, the queue refreshes every 15 seconds. Click **Enable Browser Alerts** to allow native browser notifications for newly submitted stories.
+`https://YOUR_PROJECT_REF.supabase.co/functions/v1/discord-review`
 
-## Important limitations
+Discord will send a verification ping. The function verifies Discord's Ed25519 request signature and responds to the ping; the endpoint should validate successfully. If Discord cannot validate it, check the deployed function logs and confirm the application public key secret is correct.
 
-- This is an in-browser system, not a third-party notification app. Browser pop-up notifications require permission and generally only work while the Editorial Desk page remains open. They are not guaranteed when the browser is closed or the PC is off.
-- AI moderation is a safety filter, not fact-checking. Always read the story before publishing. It does not scan images, verify image rights, or reliably determine whether satire is misleading.
-- Public submissions can be abused. Before widely promoting the form, add stronger rate limiting and abuse prevention such as CAPTCHA, and publish a privacy/contact policy.
-- TNS News is a fictional news/satire project. Clearly label invented content so readers do not mistake it for real reporting.
+## 7. What happens when a reader submits a story?
+
+1. The `submit-story` Edge Function checks the headline and article text with OpenAI's moderation endpoint. Flagged text is rejected; if moderation is unavailable, the story is not saved.
+2. A passing submission is saved in Supabase with status `pending`, so the public cannot see it.
+3. The function sends a Discord embed to the private review channel with the headline, author, category, article text, optional image, and **YES — Publish** / **NO — Reject** buttons.
+4. A button click is verified as a genuine Discord interaction. Only a Discord user whose ID is in `DISCORD_MODERATOR_IDS` can decide.
+5. YES changes a pending story to `published`; NO changes it to `rejected`. The Discord message updates to show the decision and disables the buttons. A second click cannot change a story that is no longer pending.
+6. The website Editorial Desk remains available as another way to review stories.
+
+## Important notes
+
+- AI moderation is a first safety filter, not fact-checking. Read the story and consider its claims, images, privacy, and whether satire is clearly labelled before publishing.
+- Keep the Discord review channel private and grant decision permissions only to trusted people.
+- The Discord message includes the article text so reviewers can read it before clicking. Very long article text is shortened to fit Discord's embed limits.
+- If Discord isn't configured or Discord API requests fail, the story still stays pending in the database. Check Supabase Edge Function logs for details.
+- This project is hosted on GitHub Pages, so server-side logic must run in Supabase Edge Functions; never attempt to hide bot secrets in browser code.
