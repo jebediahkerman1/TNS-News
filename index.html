@@ -71,7 +71,7 @@ function articleUrl(article){
 function makeClickable(el,article){el.tabIndex=0;el.setAttribute('role','link');el.addEventListener('click',()=>{window.location.href=articleUrl(article);});el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();window.location.href=articleUrl(article);}});}
 document.querySelectorAll('.side-story').forEach(el=>makeClickable(el,{headline:el.querySelector('h3')?.textContent||'TNS News Story',body:el.querySelector('p')?.textContent||'',category:el.querySelector('small')?.textContent.split('·')[0].trim()||'News',author:'TNS News',image_url:el.querySelector('img')?.src||null}));
 document.querySelectorAll('.card').forEach(el=>makeClickable(el,{headline:el.querySelector('h3')?.textContent||'TNS News Story',body:el.querySelector('p')?.textContent||'',category:el.closest('#sports')?'Sports':el.closest('#politics')?'Politics & World':'News',author:'TNS News',image_url:el.querySelector('img')?.src||null}));
-makeClickable(document.querySelector('.lead'),{headline:document.querySelector('.lead h1').textContent,body:[...document.querySelectorAll('.lead .summary')].map(p=>p.textContent).join('\\n\\n'),category:'Gaming',author:'TNS News Staff',image_url:document.querySelector('.lead .hero')?.src||null});
+makeClickable(document.querySelector('.lead'),{headline:document.querySelector('.lead h1').textContent,body:[...document.querySelectorAll('.lead .summary')].map(p=>p.textContent).join('\n\n'),category:'Gaming',author:'TNS News Staff',image_url:document.querySelector('.lead .hero')?.src||null});
 function loadRandomDemoStories(){
  const pool=[...(window.TNS_DEMO_STORIES||[])];
  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
