@@ -1,6 +1,6 @@
 # TNS News setup guide
 
-TNS News uses GitHub Pages for the public website and Supabase Edge Functions/Database for submissions and review. New stories are screened by AI, stored as pending, and must be approved by an authorized editor before they become public. Editors can review in the website Editorial Desk or click YES/NO buttons in a private Discord moderation channel.
+TNS News uses GitHub Pages for the public website and Supabase Edge Functions/Database for submissions and review. New stories pass basic validation and lightweight anti-spam checks, are stored as pending, and must be approved by an authorized editor before they become public. This setup does not use AI moderation. Editors can review in the website Editorial Desk or click YES/NO buttons in a private Discord moderation channel.
 
 ## 1. Website
 
@@ -47,14 +47,14 @@ You only need Discord itself and your existing Supabase project; no separate not
 
 In Supabase **Edge Functions → Secrets** (or with the CLI), set these server-side secrets:
 
-- `OPENAI_API_KEY` — your OpenAI API key for the existing AI moderation check.
+No OpenAI API key is required by the current `submit-story` function.
 - `DISCORD_BOT_TOKEN` — the bot token.
 - `DISCORD_CHANNEL_ID` — ID of the private review channel.
 - `DISCORD_APPLICATION_PUBLIC_KEY` — Public Key from the Discord Developer Portal.
 - `DISCORD_MODERATOR_IDS` — comma-separated Discord user IDs allowed to decide, for example `111111111111111111,222222222222222222`.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — Supabase normally supplies these to Edge Functions. If they are missing, configure them as server-side secrets.
 
-Do not add bot tokens, the service-role key, or the OpenAI key to `index.html`, `admin.html`, or any public GitHub file.
+Do not add bot tokens or the service-role key to `index.html`, `admin.html`, or any public GitHub file.
 
 ## 5. Deploy the Edge Functions
 
@@ -84,7 +84,7 @@ Discord will send a verification ping. The function verifies Discord's Ed25519 r
 
 ## 7. What happens when a reader submits a story?
 
-1. The `submit-story` Edge Function checks the headline and article text with OpenAI's moderation endpoint. Flagged text is rejected; if moderation is unavailable, the story is not saved.
+1. The `submit-story` Edge Function validates required fields and applies lightweight anti-spam checks. Accepted stories are saved as pending for human editorial review. These checks are not AI moderation and cannot reliably identify harmful content or misinformation.
 2. A passing submission is saved in Supabase with status `pending`, so the public cannot see it.
 3. The function sends a Discord embed to the private review channel with the headline, author, category, article text, optional image, and **YES — Publish** / **NO — Reject** buttons.
 4. A button click is verified as a genuine Discord interaction. Only a Discord user whose ID is in `DISCORD_MODERATOR_IDS` can decide.
@@ -93,7 +93,7 @@ Discord will send a verification ping. The function verifies Discord's Ed25519 r
 
 ## Important notes
 
-- AI moderation is a first safety filter, not fact-checking. Read the story and consider its claims, images, privacy, and whether satire is clearly labelled before publishing.
+- Basic automated checks are not AI moderation or fact-checking. Read the story and consider its claims, images, privacy, and whether satire is clearly labelled before publishing.
 - Keep the Discord review channel private and grant decision permissions only to trusted people.
 - The Discord message includes the article text so reviewers can read it before clicking. Very long article text is shortened to fit Discord's embed limits.
 - If Discord isn't configured or Discord API requests fail, the story still stays pending in the database. Check Supabase Edge Function logs for details.
