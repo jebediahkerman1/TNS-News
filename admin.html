@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Private TNS News editorial moderation dashboard">
+<title>TNS News — Editorial Desk</title>
+<style>
+:root{color-scheme:light;--red:#c91524;--ink:#111;--muted:#666;--line:#ddd;--paper:#fff;--soft:#f5f5f5}*{box-sizing:border-box}body{margin:0;background:#f1f1f1;color:var(--ink);font:15px Arial,sans-serif}.top{background:#111;color:#fff;padding:17px max(calc((100% - 1050px)/2),18px);display:flex;justify-content:space-between;align-items:center;gap:15px}.brand{font-size:24px;font-weight:900;letter-spacing:-1px}.brand span{color:#ef233c}.wrap{max-width:1050px;margin:24px auto;padding:0 16px}.panel{background:#fff;border:1px solid #ddd;padding:22px;margin-bottom:18px}.hidden{display:none!important}h1{margin:0 0 8px;font-size:26px}h2{font-size:19px;margin:0 0 14px}.muted{color:var(--muted);font-size:13px;line-height:1.5}.field{display:flex;flex-direction:column;gap:6px;margin:12px 0}.field label{font-size:12px;font-weight:bold;text-transform:uppercase}.field input{padding:12px;border:1px solid #bbb;font:inherit;width:100%}button{border:0;padding:11px 15px;font-weight:bold;cursor:pointer;background:#111;color:white}button:disabled{opacity:.5;cursor:wait}.primary{background:var(--red)}.reject{background:#555}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.status{padding:12px;background:#eee;border-left:4px solid #777;margin-top:12px;white-space:pre-wrap}.status.error{border-color:var(--red);background:#fff0f0}.status.good{border-color:#238342;background:#edf8f0}.stats{font-size:13px;font-weight:bold;color:#555}.story{border:1px solid #ddd;padding:17px;margin:13px 0;background:#fff}.story h3{font-size:21px;line-height:1.25;margin:8px 0}.story .body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;margin:15px 0}.pill{display:inline-block;background:#fbe8e9;color:#a10d1b;padding:5px 8px;font-size:11px;font-weight:bold;text-transform:uppercase}.story img{max-width:100%;max-height:260px;object-fit:contain;display:block;margin:12px 0}.story details{margin:12px 0}.story summary{cursor:pointer;font-weight:bold}.empty{padding:22px;background:#f5f5f5;color:#555}.small{font-size:12px;color:#666}@media(max-width:560px){.panel{padding:15px}.top{padding:14px 16px;align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header class="top"><div class="brand">TNS <span>NEWS</span> / EDITORIAL DESK</div><div class="row"><small id="signedin"></small><button id="logout" class="hidden" type="button">SIGN OUT</button></div></header>
+<main class="wrap">
+<section class="panel" id="loginpanel"><h1>Editor sign in</h1><p class="muted">Sign in with the editor account you created in Supabase Authentication. Only accounts explicitly granted TNS editor access can review submissions.</p>
+<form id="loginform"><div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required></div><div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required></div><button class="primary" type="submit">SIGN IN TO REVIEW STORIES</button></form><div id="loginstatus" class="status hidden" role="status"></div></section>
+<section id="dashboard" class="hidden">
+<div class="panel"><h1>Story review queue</h1><p class="muted">Read each complete story and inspect any image before publishing. AI moderation is only an initial safety filter; it does not verify facts, image rights, or satire context. Stories remain private until you approve them.</p><div class="row"><button id="refresh" type="button">REFRESH QUEUE</button><button id="enable-notifications" type="button">ENABLE BROWSER ALERTS</button><span id="queue-count" class="stats"></span></div><div id="alertstatus" class="small"></div><div id="dashstatus" class="status hidden" role="status"></div></div>
+<div id="queue"></div>
+</section>
+</main>
+<script>
+const SUPABASE_URL = "https://dueysmzmtpmfqsxjmzhk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_QmZZ7G5Pm5OCSnz9i0lygw_IeOG9ojA";
+let accessToken = null, currentUser = null, knownPending = new Set(), pollHandle = null;
+const $ = id => document.getElementById(id);
+async function api(path, options={}) {
+  const headers = {'apikey':SUPABASE_ANON_KEY,'Content-Type':'application/json',...(options.headers||{})};
+  if(accessToken) headers.Authorization='Bearer '+accessToken;
+  const response=await fetch(SUPABASE_URL+path,{...options,headers});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(data.msg||data.message||data.error_description||data.error||'Request failed ('+response.status+').');
+  return data;
+}
+function status(el,msg,kind=''){el.textContent=msg;el.className='status'+(kind?' '+kind:'');el.classList.remove('hidden');}
+function time(value){try{return new Date(value).toLocaleString()}catch{return value||''}}
+function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function setSignedIn(user){currentUser=user;$('signedin').textContent=user?'SIGNED IN: '+(user.email||'EDITOR'):'';$('logout').classList.toggle('hidden',!user);$('loginpanel').classList.toggle('hidden',!!user);$('dashboard').classList.toggle('hidden',!user);}
+async function verifyEditor(){
+ const rows=await api('/rest/v1/tns_admins?select=user_id&user_id=eq.'+encodeURIComponent(currentUser.id));
+ if(!rows.some(r=>r.user_id===currentUser.id)) throw new Error('This account is not an authorized TNS editor. Ask the project owner to grant access using the SQL instructions in SETUP.md.');
+}
+$('loginform').addEventListener('submit',async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;try{const session=await api('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});accessToken=session.access_token;currentUser=session.user;await verifyEditor();setSignedIn(currentUser);status($('dashstatus'),'Signed in. Loading the moderation queue…');await loadQueue(true);startPolling();}catch(err){accessToken=null;currentUser=null;setSignedIn(null);status($('loginstatus'),err.message,'error');}finally{btn.disabled=false;}});
+$('logout').addEventListener('click',async()=>{try{if(accessToken)await api('/auth/v1/logout',{method:'POST'});}catch{}stopPolling();accessToken=null;currentUser=null;knownPending.clear();setSignedIn(null);$('queue').replaceChildren();});
+async function loadQueue(initial=false){
+ try{
+  const rows=await api('/rest/v1/stories?select=id,author,category,headline,body,image_url,created_at,status,moderation_flagged,moderation_categories&status=eq.pending&order=created_at.asc&limit=100');
+  const nowIds=new Set(rows.map(s=>s.id));
+  if(!initial && 'Notification' in window && Notification.permission==='granted'){
+   rows.filter(s=>!knownPending.has(s.id)).forEach(s=>{try{new Notification('TNS News: story needs review',{body:s.headline,tag:'tns-'+s.id});}catch{}});
+  }
+  knownPending=nowIds;$('queue-count').textContent=rows.length+' pending '+(rows.length===1?'story':'stories');
+  const queue=$('queue');queue.replaceChildren();
+  if(!rows.length)queue.append(el('div','No stories waiting for review. The queue checks for new submissions automatically.','empty'));
+  rows.forEach(s=>{
+   const card=el('article',undefined,'story');card.append(el('span','PENDING EDITOR REVIEW','pill'),el('h3',s.headline));
+   card.append(el('div',(s.category||'News')+' · By '+(s.author||'Unknown')+' · Submitted '+time(s.created_at),'muted'));
+   if(s.image_url){const img=el('img');img.src=s.image_url;img.alt='Submitted story image';img.loading='lazy';img.onerror=()=>{img.remove();card.append(el('p','The submitted image could not be loaded. Check the image before approving.','small'));};card.append(img);}
+   const details=document.createElement('details');details.append(el('summary','READ FULL STORY'),el('div',s.body,'body'));card.append(details);
+   const buttons=el('div',undefined,'row'),approve=el('button','APPROVE & PUBLISH','primary'),reject=el('button','REJECT STORY','reject');
+   approve.addEventListener('click',()=>reviewStory(s,'published',approve,reject));reject.addEventListener('click',()=>reviewStory(s,'rejected',approve,reject));buttons.append(approve,reject);card.append(buttons);queue.append(card);
+  });
+  if(initial)status($('dashstatus'),'Queue loaded. New submissions are checked every 15 seconds while this page is open.','good');
+ }catch(err){status($('dashstatus'),err.message,'error');}
+}
+async function reviewStory(story,nextStatus,approve,reject){
+ const action=nextStatus==='published'?'publish':'reject';
+ if(!confirm((nextStatus==='published'?'Publish':'Reject')+' this story? '+(nextStatus==='published'?'It will become publicly visible on TNS News.':'It will remain hidden from the public.')))return;
+ approve.disabled=true;reject.disabled=true;
+ try{
+  const result=await api('/rest/v1/stories?id=eq.'+encodeURIComponent(story.id)+'&status=eq.pending',{method:'PATCH',headers:{'Prefer':'return=representation'},body:JSON.stringify({status:nextStatus,reviewed_at:new Date().toISOString(),reviewed_by:currentUser.id})});
+  if(!result.length)throw new Error('No story was changed. It may already have been reviewed; refresh the queue.');
+  status($('dashstatus'),nextStatus==='published'?'Story approved and published.':'Story rejected.','good');await loadQueue();
+ }catch(err){status($('dashstatus'),'Could not '+action+' story: '+err.message,'error');approve.disabled=false;reject.disabled=false;}
+}
+$('refresh').addEventListener('click',()=>loadQueue());
+$('enable-notifications').addEventListener('click',async()=>{
+ if(!('Notification' in window)){status($('dashstatus'),'This browser does not support desktop notifications. The in-page queue still works.','error');return;}
+ const permission=await Notification.requestPermission();
+ $('alertstatus').textContent=permission==='granted'?'Browser alerts enabled. Keep the Editorial Desk open to receive alerts.':'Browser alerts were not enabled; the in-page queue still works.';
+ if(permission==='granted')status($('dashstatus'),'Browser alerts enabled. Keep this page open for new-story notifications.','good');
+});
+function startPolling(){stopPolling();loadQueue(true);pollHandle=setInterval(()=>loadQueue(false),15000);}
+function stopPolling(){if(pollHandle)clearInterval(pollHandle);pollHandle=null;}
+window.addEventListener('beforeunload',stopPolling);
+</script>
+</body></html>
