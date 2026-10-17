@@ -63,7 +63,6 @@ Install Node.js and the Supabase CLI, clone this repository, then run these comm
 ```sh
 supabase login
 supabase link --project-ref YOUR_PROJECT_REF
-supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 supabase secrets set DISCORD_BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
 supabase secrets set DISCORD_CHANNEL_ID=YOUR_DISCORD_CHANNEL_ID
 supabase secrets set DISCORD_APPLICATION_PUBLIC_KEY=YOUR_DISCORD_PUBLIC_KEY
