@@ -51,8 +51,8 @@
 </main><div class="article-modal" id="article-modal" role="dialog" aria-modal="true" aria-labelledby="article-title"><article class="article-panel"><button class="article-close" id="article-close" type="button">CLOSE ✕</button><div class="kicker" id="article-kicker">TNS NEWS</div><h2 id="article-title"></h2><div class="meta" id="article-meta"></div><div id="article-image-wrap"></div><div class="article-body" id="article-body"></div></article></div><footer class="footer"><span>© 2026 TNS NEWS · THE NEWS NEVER STOPS.</span><span><a href="#top">Home</a><a href="#sports">Sports</a><a href="#politics">Politics</a><a href="#submit">Submit</a></span></footer>
 <script>
 /* Set these two public Supabase project values after following SETUP.md. Never put a service-role key or OpenAI key here. */
-const SUPABASE_URL = "";
-const SUPABASE_ANON_KEY = "";
+const SUPABASE_URL = "https://dueysmzmtpmfqsxjmzhk.supabase.co/";
+const SUPABASE_ANON_KEY = "sb_publishable_QmZZ7G5Pm5OCSnz9i0lygw_IeOG9ojA";
 const $ = id => document.getElementById(id);
 const storyEls = [...document.querySelectorAll('h1,h2,h3,.summary,.card p,.side-story h3')];
 $('searchform').addEventListener('submit', e => {e.preventDefault();const q=$('searchinput').value.trim().toLowerCase(), box=$('searchresults'), list=$('resultlist');box.classList.add('show');list.replaceChildren();if(!q){list.textContent='Type a topic to search TNS News.';return;}const matches=storyEls.filter(el=>el.textContent.toLowerCase().includes(q));if(!matches.length){list.textContent='No matching stories. Try sports, football, politics, bread, or Mine Theft Auto.';return;}matches.slice(0,8).forEach(el=>{const p=document.createElement('p');p.textContent=el.textContent.trim();p.style.margin='8px 0';list.appendChild(p);});box.scrollIntoView({behavior:'smooth',block:'nearest'});});
