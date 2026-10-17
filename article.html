@@ -36,13 +36,26 @@ function render(story,isDemo=false){
  const body=text('div',story.body||'No full article text is available.','body');root.append(body);
  root.append(text('div',isDemo?'This article is fictional satire created for the TNS News website. Names, events and claims in this demo story are invented.':'Community submission published by TNS News after editorial review.','notice'));
 }
+function generatedFullText(headline,category,summary){
+ const subject=headline||'A surprising development';
+ const detail=summary||'The development has attracted attention across the fictional community.';
+ return detail+'\\n\\nOfficials and residents in the fictional setting described the announcement as unexpected, with several people saying they would wait for more details before drawing conclusions. The story quickly became a topic of conversation, though different groups offered different explanations for what had happened.\\n\\nA spokesperson said the situation was being reviewed and that further information would be shared when it became available. No additional timeline was confirmed, and readers were advised to treat early speculation cautiously.\\n\\nObservers noted that the headline had raised several questions about what might happen next. For now, the main details remain limited to the initial report, and the fictional organisations involved have not announced any further changes.\\n\\nTNS News will continue following this fictional story in its satirical newsroom. This article is invented for entertainment and should not be treated as real-world reporting.';
+}
 async function init(){
  if(demo){
   const story=(window.TNS_DEMO_STORIES||[]).find(s=>s.slug===demo);
   if(story){render(story,true);return;}
   root.replaceChildren(text('h1','Story not found'),text('p','This generated demo story is not available. Return to the newsroom and open another article.','error'));return;
  }
- if(!id){root.replaceChildren(text('h1','No story selected'),text('p','Open an article from the TNS News homepage to read the full story.','error'));return;}
+ if(!id){
+  const headline=params.get('headline');
+  if(headline){
+   const category=params.get('category')||'News', author=params.get('author')||'TNS News', summary=params.get('body')||'';
+   render({headline,category,author,summary,image_url:params.get('image_url')||null,body:generatedFullText(headline,category,summary)},true);
+   return;
+  }
+  root.replaceChildren(text('h1','No story selected'),text('p','Open an article from the TNS News homepage to read the full story.','error'));return;
+ }
  try{
   const response=await fetch(SUPABASE_URL+'/rest/v1/stories?select=id,headline,body,author,category,image_url,created_at,status&id=eq.'+encodeURIComponent(id)+'&status=eq.published&limit=1',{headers:{apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY}});
   if(!response.ok)throw new Error('Could not retrieve the story.');
